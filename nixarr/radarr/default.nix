@@ -8,6 +8,7 @@ with lib; let
   cfg = config.nixarr.radarr;
   globals = config.util-nixarr.globals;
   nixarr = config.nixarr;
+  arrLib = config.util-nixarr.arrLib;
   defaultPort = 7878;
 
   additionalInstancesRaw =
@@ -42,6 +43,16 @@ with lib; let
       if inst.librarySubDir != null
       then inst.librarySubDir
       else "${cfg.librarySubDir}-${name}";
+    computedGuiSettings =
+      recursiveUpdate cfg.guiSettings (inst.guiSettings or {});
+    computedEnableDeclarative =
+      if inst.declarative != null
+      then inst.declarative
+      else cfg.declarative;
+    computedApiKeyFile =
+      if inst.apiKeyFile != null
+      then inst.apiKeyFile
+      else cfg.apiKeyFile;
   in {
     key = name;
     serviceName = "radarr-${name}";
@@ -52,6 +63,9 @@ with lib; let
     librarySubDir = computedLibrarySubDir;
     vpnEnable = computedVpnEnable;
     openFirewall = computedOpenFirewall;
+    declarative = computedEnableDeclarative;
+    apiKeyFile = computedApiKeyFile;
+    guiSettings = computedGuiSettings;
   };
 
   additionalInstances = imap1 normalizeInstance additionalInstancesRaw;
@@ -66,6 +80,9 @@ with lib; let
     librarySubDir = cfg.librarySubDir;
     vpnEnable = cfg.vpn.enable;
     openFirewall = cfg.openFirewall;
+    declarative = cfg.declarative;
+    apiKeyFile = cfg.apiKeyFile;
+    guiSettings = cfg.guiSettings;
   };
 
   allInstances = [baseInstance] ++ additionalInstances;
@@ -95,6 +112,21 @@ with lib; let
   stateDirs = unique (map (instance: instance.stateDir) enabledInstances);
 
   ports = map (instance: instance.port) enabledInstances;
+
+  mkInstanceInitScript = instance:
+    arrLib.mkArrInitScript {
+      serviceName = "radarr";
+      instanceName = instance.serviceName;
+      apiPath = "api/v3";
+      package = instance.package;
+      dataDir = instance.stateDir;
+      apiKeyFile = instance.apiKeyFile;
+      port = instance.port;
+      guiSettings = instance.guiSettings;
+
+      enableRootFolders = true;
+      enableMediaManagement = true;
+    };
 in {
   imports = [./settings-sync];
 
@@ -174,6 +206,62 @@ in {
       defaultText = literalExpression "nixarr.radarr.vpn.enable";
     };
 
+    declarative = mkOption {
+      type = types.bool;
+      default = false;
+      example = true;
+      description = ''
+        Enable declarative initialization and configuration via API.
+        When enabled, Radarr will be configured on first start using the settings
+        defined in `guiSettings`.
+
+        **Requires:** `apiKeyFile` to be set.
+      '';
+    };
+
+    apiKeyFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/secrets/radarr-apikey";
+      description = ''
+        Path to file containing the API key for Radarr.
+        Required when `declarative` is true.
+      '';
+    };
+
+    guiSettings = mkOption {
+      type = arrLib.mkGuiSettingsType {
+        serviceName = "radarr";
+        enableNaming = true;
+        enableRootFolders = true;
+        enableMediaManagement = true;
+      };
+      default = {};
+      example = literalExpression ''
+        {
+          host.password = "/run/secrets/radarr-password";
+          rootFolders = [ "/media/movies" ];
+          downloadClients = {
+            qBittorrent = {
+              implementation = "QBittorrent";
+              fields = {
+                host = "localhost";
+                port = 8080;
+                username = "admin";
+                password = "/run/secrets/qbit-password";
+              };
+            };
+          };
+        }
+      '';
+      description = ''
+        Declarative configuration for Radarr via API.
+        Only used when `declarative` is true.
+
+        Note: Quality profiles and Naming should be managed via recyclarr instead.
+      '';
+    };
+
     instances = mkOption {
       type = types.attrsOf (types.submodule ({name, ...}: {
         options = {
@@ -233,6 +321,37 @@ in {
               `nixarr.radarr.vpn.enable`.
             '';
           };
+
+          declarative = mkOption {
+            type = types.nullOr types.bool;
+            default = null;
+            description = ''
+              Override `declarative` for this instance.
+              Defaults to `nixarr.radarr.declarative`.
+            '';
+          };
+
+          apiKeyFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Override API key file for this instance.
+              Defaults to `nixarr.radarr.apiKeyFile`.
+            '';
+          };
+
+          guiSettings = mkOption {
+            type = arrLib.mkGuiSettingsType {
+              serviceName = "radarr";
+              enableRootFolders = true;
+              enableMediaManagement = true;
+            };
+            default = {};
+            description = ''
+              Override or extend GUI settings for this instance.
+              These are recursively merged with the base `guiSettings`.
+            '';
+          };
         };
       }));
       default = {};
@@ -241,6 +360,9 @@ in {
           "4k" = {
             port = 7879;
             librarySubDir = "movies-4k";
+            guiSettings = {
+              rootFolders = ["/media/movies-4k"];
+            };
           };
           kids.port = 7880;
         }
@@ -275,6 +397,10 @@ in {
       {
         assertion = length ports == length (unique ports);
         message = "Each Radarr instance must use a unique port.";
+      }
+      {
+        assertion = all (inst: !inst.declarative || inst.apiKeyFile != null) enabledInstances;
+        message = "All Radarr instances with declarative=true must have apiKeyFile set.";
       }
     ];
 
@@ -336,7 +462,9 @@ in {
       }
       // mkMerge (
         (map (
-            instance: {
+            instance: let
+              initScript = mkInstanceInitScript instance;
+            in {
               ${instance.serviceName} = {
                 description =
                   "Radarr"
@@ -352,7 +480,10 @@ in {
                   Type = "simple";
                   User = globals.radarr.user;
                   Group = globals.radarr.group;
-                  ExecStart = "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}";
+                  ExecStart =
+                    if instance.declarative
+                    then "${lib.getExe initScript}"
+                    else "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}";
                   Restart = "on-failure";
                   # Set UMask to 0002 so directories are created with group write permission (775)
                   # This allows other services in the media group (like Jellyfin) to modify files

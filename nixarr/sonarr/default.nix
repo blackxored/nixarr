@@ -8,6 +8,7 @@ with lib; let
   cfg = config.nixarr.sonarr;
   globals = config.util-nixarr.globals;
   nixarr = config.nixarr;
+  arrLib = config.util-nixarr.arrLib;
   defaultPort = 8989;
 
   additionalInstancesRaw =
@@ -42,6 +43,16 @@ with lib; let
       if inst.librarySubDir != null
       then inst.librarySubDir
       else "${cfg.librarySubDir}-${name}";
+    computedGuiSettings =
+      recursiveUpdate cfg.guiSettings (inst.guiSettings or {});
+    computedEnableDeclarative =
+      if inst.declarative != null
+      then inst.declarative
+      else cfg.declarative;
+    computedApiKeyFile =
+      if inst.apiKeyFile != null
+      then inst.apiKeyFile
+      else cfg.apiKeyFile;
   in {
     key = name;
     serviceName = "sonarr-${name}";
@@ -52,6 +63,9 @@ with lib; let
     librarySubDir = computedLibrarySubDir;
     vpnEnable = computedVpnEnable;
     openFirewall = computedOpenFirewall;
+    declarative = computedEnableDeclarative;
+    apiKeyFile = computedApiKeyFile;
+    guiSettings = computedGuiSettings;
   };
 
   additionalInstances = imap1 normalizeInstance additionalInstancesRaw;
@@ -66,6 +80,9 @@ with lib; let
     librarySubDir = cfg.librarySubDir;
     vpnEnable = cfg.vpn.enable;
     openFirewall = cfg.openFirewall;
+    declarative = cfg.declarative;
+    apiKeyFile = cfg.apiKeyFile;
+    guiSettings = cfg.guiSettings;
   };
 
   allInstances = [baseInstance] ++ additionalInstances;
@@ -95,6 +112,21 @@ with lib; let
   stateDirs = unique (map (instance: instance.stateDir) enabledInstances);
 
   ports = map (instance: instance.port) enabledInstances;
+
+  mkInstanceInitScript = instance:
+    arrLib.mkArrInitScript {
+      serviceName = "sonarr";
+      instanceName = instance.serviceName;
+      apiPath = "api/v3";
+      package = instance.package;
+      dataDir = instance.stateDir;
+      apiKeyFile = instance.apiKeyFile;
+      port = instance.port;
+      guiSettings = instance.guiSettings;
+
+      enableRootFolders = true;
+      enableMediaManagement = true;
+    };
 in {
   imports = [./settings-sync];
 
@@ -174,6 +206,60 @@ in {
       defaultText = literalExpression "nixarr.sonarr.vpn.enable";
     };
 
+    declarative = mkOption {
+      type = types.bool;
+      default = false;
+      example = true;
+      description = ''
+        Enable declarative initialization and configuration via API.
+        When enabled, Sonarr will be configured on first start using the
+        settings defined in `guiSettings`.
+
+        **Requires:** `apiKeyFile` to be set.
+      '';
+    };
+
+    apiKeyFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/secrets/sonarr-apikey";
+      description = ''
+        Path to file containing the API key for Sonarr.
+        Required when `enableInit` is true.
+      '';
+    };
+
+    guiSettings = mkOption {
+      type = arrLib.mkGuiSettingsType {
+        serviceName = "sonarr";
+        enableRootFolders = true;
+        enableMediaManagement = true;
+      };
+      default = {};
+      example = literalExpression ''
+          host.password = config.sops.secrets."sonarr-password".path;
+          rootFolders = ["/media/tv"];
+          downloadClients = {
+            qBittorrent = {
+              implementation = "QBittorrent";
+              fields = {
+                host = "localhost";
+                port = 8080;
+                username = "admin";
+                password = "/run/secrets/qbit-password";
+              };
+            };
+          };
+        }
+      '';
+      description = ''
+        Declarative configuration for Sonarr via API.
+        Only used when `declarative` is true.
+
+        Note: Quality Profiles and Naming should be managed via recyclarr instead.
+      '';
+    };
+
     instances = mkOption {
       type = types.attrsOf (types.submodule ({name, ...}: {
         options = {
@@ -233,6 +319,37 @@ in {
               `nixarr.sonarr.vpn.enable`.
             '';
           };
+
+          declarative = mkOption {
+            type = types.nullOr types.bool;
+            default = null;
+            # TODO: explain default behavior
+            description = ''
+              Override `declarative` for this instance.
+            '';
+          };
+
+          apiKeyFile = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = ''
+              Override the API key file for this instance.
+              Defaults to `nixarr.sonarr.apiKeyFile`;
+            '';
+          };
+
+          guiSettings = mkOption {
+            type = arrLib.mkGuiSettingsType {
+              serviceName = "sonarr";
+              enableRootFolders = true;
+              enableMediaManagement = true;
+            };
+            default = {};
+            description = ''
+              Override or extend GUI settings for this instance.
+              These are recursively merged with the base `guiSettings`.
+            '';
+          };
         };
       }));
       default = {};
@@ -261,6 +378,10 @@ in {
       {
         assertion = length ports == length (unique ports);
         message = "Each Sonarr instance must use a unique port.";
+      }
+      {
+        assertion = all (inst: !inst.declarative || inst.apiKeyFile != null) enabledInstances;
+        message = "All Sonarr instances with declarative=true must have apiKeyFile set.";
       }
       {
         assertion = cfg.vpn.configureNginx -> cfg.vpn.enable;
@@ -298,7 +419,7 @@ in {
     };
 
     systemd.services =
-      {
+       {
         # Enable and specify VPN namespace to confine service in.
         sonarr.vpnConfinement = mkIf cfg.vpn.enable {
           enable = true;
@@ -307,7 +428,9 @@ in {
       }
       // mkMerge (
         (map (
-            instance: {
+            instance: let
+              initScript = mkInstanceInitScript instance;
+            in {
               ${instance.serviceName} = {
                 description =
                   "Sonarr"
@@ -323,7 +446,10 @@ in {
                   Type = "simple";
                   User = globals.sonarr.user;
                   Group = globals.sonarr.group;
-                  ExecStart = "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}";
+                  ExecStart =
+                    if instance.declarative
+                    then "${lib.getExe initScript}"
+                    else "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}";
                   Restart = "on-failure";
                 };
               };
