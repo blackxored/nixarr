@@ -124,6 +124,13 @@ with lib; let
       port = instance.port;
       guiSettings = instance.guiSettings;
 
+      enableNaming = true;
+      namingDefault = {
+        renameMovies = true;
+        replaceIllegalCharacters = true;
+        standardMovieFormat = "{Movie CleanTitle} {(Release Year)} - {{Edition Tags}} {[MediaInfo 3D]}{[Custom Formats]}{[Quality Full]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo VideoCodec]}{-Release Group}";
+        movieFolderFormat = "{Movie CleanTitle} ({Release Year})";
+      };
       enableRootFolders = true;
       enableMediaManagement = true;
     };

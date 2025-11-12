@@ -124,6 +124,20 @@ with lib; let
       port = instance.port;
       guiSettings = instance.guiSettings;
 
+      enableNaming = true;
+      namingDefault = {
+        renameEpisodes = true;
+        replaceIllegalCharacters = true;
+        colonReplacementFormat = 4;
+        customColonReplacementFormat = "";
+        # TODO: confirm is Prefixed Range
+        multiEpisodeStyle = 5;
+        standardEpisodeFormat = "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle:90} {[Custom Formats]}{[Quality Full]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo VideoCodec]}{-Release Group}";
+        dailyEpisodeFormat = "{Series TitleYear} - {Air-Date} - {Episode CleanTitle:90} {[Custom Formats]}{[Quality Full]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoDynamicRangeType]}{[Mediainfo VideoCodec]}{-Release Group}";
+        animeEpisodeFormat = "{Series TitleYear} - S{season:00}E{episode:00} - {absolute:000} - {Episode CleanTitle:90} {[Custom Formats]}{[Quality Full]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{MediaInfo AudioLanguages}{[MediaInfo VideoDynamicRangeType]}[{Mediainfo VideoCodec }{MediaInfo VideoBitDepth}bit]{-Release Group}";
+        seriesFolderFormat = "{Series TitleYear}";
+        seasonFolderFormat = "Season {season:00}";
+      };
       enableRootFolders = true;
       enableMediaManagement = true;
     };
@@ -233,6 +247,7 @@ in {
       type = arrLib.mkGuiSettingsType {
         serviceName = "sonarr";
         enableRootFolders = true;
+        enableNaming = true;
         enableMediaManagement = true;
       };
       default = {};

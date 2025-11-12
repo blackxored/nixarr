@@ -73,6 +73,8 @@
     guiSettings, # The settings configuration
     # Feature flags
     enableRootFolders ? false,
+    enableNaming ? false,
+    namingDefault ? {},
     enableMediaManagement ? false,
     enableIndexers ? false,
     enableIndexerProxies ? false,
@@ -198,6 +200,7 @@
                 analyticsEnabled = false;
                 authenticationMethod = "basic"; # For Authentik. Default: "forms".
                 authenticationRequired = "enabled";
+                username = s.host.username or "";
                 passwordConfirmation = s.host.password or "";
                 backupInterval = 7;
                 backupRetention = 28;
@@ -215,6 +218,15 @@
                 updateScriptPath = "";
               }
               // (s.host or {}))}
+
+          echo "Configuring naming"
+          ${lib.optionalString enableNaming (
+            curl "PUT" "/config/naming/1" (
+              {id = 1;}
+              // namingDefault
+              // s.naming
+            )
+          )}
 
           echo "Configuring media management"
           ${lib.optionalString enableMediaManagement (
