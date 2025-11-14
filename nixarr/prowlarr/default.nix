@@ -8,7 +8,25 @@ with lib; let
   cfg = config.nixarr.prowlarr;
   globals = config.util-nixarr.globals;
   nixarr = config.nixarr;
+  arrLib = config.util-nixarr.arrLib;
   port = 9696;
+  configPath = cfg.stateDir + "/config.json";
+
+  mkInstanceInitScript = instance:
+    arrLib.mkArrInitScript {
+      serviceName = "prowlarr";
+      instanceName = instance.serviceName;
+      apiPath = "api/v1";
+      package = instance.package;
+      dataDir = instance.dataDir;
+      apiKeyFile = instance.apiKeyFile;
+      port = instance.port;
+      guiSettings = instance.guiSettings;
+
+      enableIndexers = true;
+      enableIndexerProxies = true;
+      enableApplications = true;
+    };
 in {
   imports = [./settings-sync];
 
@@ -80,6 +98,50 @@ in {
       '';
       defaultText = literalExpression "nixarr.prowlarr.vpn.enable";
     };
+
+    declarative = mkOption {
+      type = types.bool;
+      default = false;
+      example = true;
+      description = ''
+        Enable declarative initialization and configuration via API.
+        When enabled, Prowlarr will be configured on first start using the
+        settings defined in `guiSettings`.
+
+        **Requires:** `apiKeyFile` to be set.
+      '';
+    };
+
+    apiKeyFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/run/secrets/prowlarr_api_key";
+      description = ''
+        Path to file containing the API key for Prowlarr.
+        Required when `declarative` is true.
+      '';
+    };
+
+    guiSettings = mkOption {
+      type = arrLib.mkGuiSettingsType {
+        serviceName = "prowlarr";
+
+        enableIndexers = true;
+        enableIndexerProxies = true;
+        enableApplications = true;
+      };
+      default = {};
+      # TODO: indexer example
+      example = literalExpression ''
+        host.password = config.sops.secrets."prowlarr_password".path;
+      '';
+      description = ''
+        Declarative configuration for Prowlarr via API.
+        Only used when `declarative` is true.
+
+        Note: Quality Profiles and Naming should be managed via recyclarr instead.
+      '';
+    };
   };
 
   config = mkIf (nixarr.enable && cfg.enable) {
@@ -111,13 +173,33 @@ in {
       openFirewall = cfg.openFirewall;
     };
 
-    systemd.services.prowlarr.serviceConfig = {
-      # `User` and `Group` override `DynamicUser = true` from the NixOS Prowlarr
-      # module (because a user and group with those names exists).
-      User = globals.prowlarr.user;
-      Group = globals.prowlarr.group;
-      ExecStart = mkForce "${lib.getExe cfg.package} -nobrowser -data=${cfg.stateDir}";
-      ReadWritePaths = [cfg.stateDir];
+    systemd.services.prowlarr = {
+      serviceConfig = let
+        initScript = mkInstanceInitScript {
+          inherit (cfg) package port apiKeyFile guiSettings;
+          serviceName = "prowlarr";
+          dataDir = cfg.stateDir;
+        };
+      in {
+        # `User` and `Group` override `DynamicUser = true` from the NixOS Prowlarr
+        # module (because a user and group with those names exists).
+        User = globals.prowlarr.user;
+        Group = globals.prowlarr.group;
+        # ExecStart = mkForce "${lib.getExe cfg.package} -nobrowser -data=${cfg.stateDir}";
+        ReadWritePaths = [cfg.stateDir];
+        ExecStart = lib.mkForce (
+          if cfg.declarative
+          then "${lib.getExe initScript}"
+          else "${lib.getExe cfg.package} -nobrowser -data=${lib.escapeShellArg cfg.stateDir}"
+        );
+        Restart = "on-failure";
+      };
+
+      # Enable and specify VPN namespace to confine service in.
+      vpnConfinement = mkIf cfg.vpn.enable {
+        enable = true;
+        vpnNamespace = "wg";
+      };
     };
 
     networking.firewall = mkIf cfg.openFirewall {
@@ -131,12 +213,6 @@ in {
         group = globals.prowlarr.group;
         uid = globals.uids.${globals.prowlarr.user};
       };
-    };
-
-    # Enable and specify VPN namespace to confine service in.
-    systemd.services.prowlarr.vpnConfinement = mkIf cfg.vpn.enable {
-      enable = true;
-      vpnNamespace = "wg";
     };
 
     vpnNamespaces.wg = mkIf cfg.vpn.enable {
