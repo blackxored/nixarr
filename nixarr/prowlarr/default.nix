@@ -169,7 +169,9 @@ in {
     services.prowlarr = {
       enable = cfg.enable;
       package = cfg.package;
-      settings.server.port = cfg.port;
+      settings.server = {
+        inherit (cfg) port bindaddress;
+      };
       openFirewall = cfg.openFirewall;
     };
 
