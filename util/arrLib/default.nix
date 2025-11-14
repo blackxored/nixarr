@@ -30,10 +30,16 @@
       import json
       import jsonpath_ng.ext as jsonpath
       import sys
+      import os
 
 
       def func(_, data, field):
-          file_path = data[field]
+          credentials_dir = os.getenv("CREDENTIALS_DIRECTORY")
+          if credentials_dir:
+              file_path = data[field].replace("%d/", credentials_dir + "/")
+          else:
+              file_path = data[field]
+
           with open(file_path) as f:
               return f.read().strip()
 
@@ -157,7 +163,6 @@
 
           echo "Starting ${instanceName} to generate db..."
 
-          # TODO: would service stop work if this is backgrounded like this?
           ${apiKeyEnvVar}=$(cat ${apiKeyFile}) \
             ${lib.getExe package} \
             -nobrowser \
@@ -211,7 +216,7 @@
                 sslCertPath = "";
                 sslCertPassword = "";
                 instanceName = instanceName;
-                branch = "main";
+                branch = "master";
                 logLevel = "debug";
                 consoleLogLevel = "";
                 logSizeLimit = 1;
@@ -282,6 +287,7 @@
               curl' "POST" "/downloadclient" ''
                 | json-file-resolve \
                   '$.fields[?(@.name=="password")].value' \
+                  '$.fields[?(@.name=="apiKey")].value' \
               '' ({
                   categories = [];
                   priority = 25;
@@ -313,6 +319,7 @@
               curl' "POST" "/indexer" ''
                 | json-file-resolve \
                   '$.fields[?(@.name=="password")].value' \
+                  '$.fields[?(@.name=="apiKey")].value' \
               '' ({
                   appProfileId = 1;
                   priority = 25;
