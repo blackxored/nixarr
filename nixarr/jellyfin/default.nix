@@ -9,6 +9,10 @@ with lib; let
   globals = config.util-nixarr.globals;
   defaultPort = 8096;
   nixarr = config.nixarr;
+  serviceName =
+    if cfg.declarative
+    then "declarative-jellyfin"
+    else "jellyfin";
 in {
   options.nixarr.jellyfin = {
     enable = mkOption {
@@ -121,6 +125,22 @@ in {
         };
       };
     };
+
+    declarative = mkOption {
+      type = types.bool;
+      default = false;
+      description = "Use declarative-jellyfin instead of jellyfin";
+    };
+
+    manageDirs = mkOption {
+      type = types.bool;
+      default = true;
+    };
+
+    librarySubDirs = mkOption {
+      type = types.listOf types.str;
+      default = [];
+    };
   };
 
   config = mkIf (nixarr.enable && cfg.enable) {
@@ -172,36 +192,48 @@ in {
       };
     };
 
-    systemd.tmpfiles.rules = [
-      "d '${cfg.stateDir}'        0700 ${globals.jellyfin.user} root - -"
-      "d '${cfg.stateDir}/log'    0700 ${globals.jellyfin.user} root - -"
-      "d '${cfg.stateDir}/cache'  0700 ${globals.jellyfin.user} root - -"
-      "d '${cfg.stateDir}/data'   0700 ${globals.jellyfin.user} root - -"
-      "d '${cfg.stateDir}/config' 0700 ${globals.jellyfin.user} root - -"
+    systemd.tmpfiles.rules =
+      [
+        "d '${cfg.stateDir}'        0700 ${globals.jellyfin.user} root - -"
+        "d '${cfg.stateDir}/log'    0700 ${globals.jellyfin.user} root - -"
+        "d '${cfg.stateDir}/cache'  0700 ${globals.jellyfin.user} root - -"
+        "d '${cfg.stateDir}/data'   0700 ${globals.jellyfin.user} root - -"
+        "d '${cfg.stateDir}/config' 0700 ${globals.jellyfin.user} root - -"
 
-      # Media Dirs
-      "d '${nixarr.mediaDir}/library'             0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
-      "d '${nixarr.mediaDir}/library/shows'       0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
-      "d '${nixarr.mediaDir}/library/movies'      0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
-      "d '${nixarr.mediaDir}/library/music'       0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
-      "d '${nixarr.mediaDir}/library/books'       0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
-      "d '${nixarr.mediaDir}/library/audiobooks'  0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
-    ];
+        "d '${nixarr.mediaDir}/library'             0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+      ]
+      ++ (lib.optionals cfg.manageDirs [
+        # Media Dirs
+        "d '${nixarr.mediaDir}/library/shows'       0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+        "d '${nixarr.mediaDir}/library/movies'      0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+        "d '${nixarr.mediaDir}/library/music'       0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+        "d '${nixarr.mediaDir}/library/books'       0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+        "d '${nixarr.mediaDir}/library/audiobooks'  0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+      ])
+      ++ (map (
+          dir: "d '${nixarr.mediaDir}/library/${dir}' 0775 ${globals.libraryOwner.user} ${globals.libraryOwner.group} - -"
+        )
+        cfg.librarySubDirs);
 
     # Always prioritise Jellyfin IO
     systemd.services.jellyfin.serviceConfig.IOSchedulingPriority = 0;
 
-    services.jellyfin = {
-      enable = cfg.enable;
-      package = cfg.package;
-      user = globals.jellyfin.user;
-      group = globals.jellyfin.group;
-      openFirewall = cfg.openFirewall;
-      logDir = "${cfg.stateDir}/log";
-      cacheDir = "${cfg.stateDir}/cache";
-      dataDir = "${cfg.stateDir}/data";
-      configDir = "${cfg.stateDir}/config";
-    };
+    services.${serviceName} =
+      {
+        enable = cfg.enable;
+        package = cfg.package;
+        user = globals.jellyfin.user;
+        group = globals.jellyfin.group;
+        openFirewall = cfg.openFirewall;
+        logDir = "${cfg.stateDir}/log";
+        cacheDir = "${cfg.stateDir}/cache";
+        dataDir = "${cfg.stateDir}/data";
+        configDir = "${cfg.stateDir}/config";
+      }
+      // lib.optionalAttrs cfg.declarative {
+        system.metadataPath = "${cfg.stateDir}/metadata";
+        backupDir = "${cfg.stateDir}/backups";
+      };
 
     networking.firewall = mkIf cfg.expose.https.enable {
       allowedTCPPorts = [80 443];
