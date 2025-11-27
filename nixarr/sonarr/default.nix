@@ -1,7 +1,7 @@
 {
-  config,
-  lib,
   pkgs,
+  lib,
+  config,
   ...
 }:
 with lib; let
@@ -10,7 +10,6 @@ with lib; let
   nixarr = config.nixarr;
   arrLib = config.util-nixarr.arrLib;
   defaultPort = 8989;
-
   additionalInstancesRaw =
     mapAttrsToList (
       name: instanceCfg: instanceCfg // {__name = name;}
@@ -137,6 +136,7 @@ with lib; let
         animeEpisodeFormat = "{Series TitleYear} - S{season:00}E{episode:00} - {absolute:000} - {Episode CleanTitle:90} {[Custom Formats]}{[Quality Full]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{MediaInfo AudioLanguages}{[MediaInfo VideoDynamicRangeType]}[{Mediainfo VideoCodec }{MediaInfo VideoBitDepth}bit]{-Release Group}";
         seriesFolderFormat = "{Series TitleYear}";
         seasonFolderFormat = "Season {season:00}";
+        specialsFolderFormat = "Specials";
       };
       enableRootFolders = true;
       enableMediaManagement = true;
@@ -382,10 +382,29 @@ in {
         service name (e.g. `sonarr-anime`).
       '';
     };
+
+    jellyseerrServerId = mkOption {
+      type = types.int;
+    };
+
+    enabledInstances = mkOption {
+      type = types.unspecified;
+      visible = false;
+      internal = true;
+      readOnly = true;
+      default = enabledInstances;
+    };
   };
 
   config = mkIf (nixarr.enable && anyEnabled) {
     assertions = [
+      {
+        assertion = cfg.vpn.configureNginx -> cfg.vpn.enable;
+        message = ''
+          The nixarr.sonarr.vpn.configureNginx option requires the
+          nixarr.sonarr.vpn.enable option to be set, but it was not.
+        '';
+      }
       {
         assertion = (vpnInstances == []) || nixarr.vpn.enable;
         message = "All Sonarr instances that enable VPN require nixarr.vpn.enable.";
@@ -397,13 +416,6 @@ in {
       {
         assertion = all (inst: !inst.declarative || inst.apiKeyFile != null) enabledInstances;
         message = "All Sonarr instances with declarative=true must have apiKeyFile set.";
-      }
-      {
-        assertion = cfg.vpn.configureNginx -> cfg.vpn.enable;
-        message = ''
-          The nixarr.sonarr.vpn.configureNginx option requires the
-          nixarr.sonarr.vpn.enable option to be set, but it was not.
-        '';
       }
     ];
 
@@ -434,7 +446,7 @@ in {
     };
 
     systemd.services =
-       {
+      {
         # Enable and specify VPN namespace to confine service in.
         sonarr.vpnConfinement = mkIf cfg.vpn.enable {
           enable = true;

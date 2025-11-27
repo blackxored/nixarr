@@ -286,6 +286,11 @@ in {
         [search.nixos.org](https://search.nixos.org/options?channel=unstable&query=services.transmission.settings).
       '';
     };
+
+    manageDirs = mkOption {
+      type = types.bool;
+      default = true;
+    };
   };
 
   imports = [
@@ -326,22 +331,26 @@ in {
       };
     };
 
-    systemd.tmpfiles.rules = [
-      "d '${cfg.stateDir}'                             0750 ${globals.transmission.user} ${globals.transmission.group} - -"
-      # This is fixes a bug in nixpks (https://github.com/NixOS/nixpkgs/issues/291883)
-      "d '${cfg.stateDir}/.config'                     0750 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${cfg.stateDir}/.config/transmission-daemon' 0750 ${globals.transmission.user} ${globals.transmission.group} - -"
+    systemd.tmpfiles.rules =
+      
+      [
+        "d '${cfg.stateDir}'                             0750 ${globals.transmission.user} ${globals.transmission.group} - -"
+        # This is fixes a bug in nixpks (https://github.com/NixOS/nixpkgs/issues/291883)
+        "d '${cfg.stateDir}/.config'                     0750 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${cfg.stateDir}/.config/transmission-daemon' 0750 ${globals.transmission.user} ${globals.transmission.group} - -"
 
-      # Media Dirs
-      "d '${nixarr.mediaDir}/torrents'             0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/.incomplete' 0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/.watch'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/manual'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/lidarr'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/radarr'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/sonarr'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-      "d '${nixarr.mediaDir}/torrents/shelfmark'   0755 ${globals.transmission.user} ${globals.transmission.group} - -"
-    ];
+        # Media Dirs
+        "d '${nixarr.mediaDir}/torrents'             0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${nixarr.mediaDir}/torrents/.incomplete' 0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${nixarr.mediaDir}/torrents/.watch'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+      ]
+      ++ (lib.optionals cfg.manageDirs) [
+        "d '${nixarr.mediaDir}/torrents/manual'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${nixarr.mediaDir}/torrents/lidarr'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${nixarr.mediaDir}/torrents/radarr'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${nixarr.mediaDir}/torrents/sonarr'      0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+        "d '${nixarr.mediaDir}/torrents/shelfmark'   0755 ${globals.transmission.user} ${globals.transmission.group} - -"
+      ];
 
     util-nixarr.services.cross-seed = mkIf cfg-cross-seed.enable {
       enable = true;

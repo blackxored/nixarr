@@ -170,7 +170,7 @@ in {
       enable = cfg.enable;
       package = cfg.package;
       settings.server = {
-        inherit (cfg) port bindaddress;
+        inherit (cfg) port;
       };
       openFirewall = cfg.openFirewall;
     };

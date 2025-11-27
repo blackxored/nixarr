@@ -1,5 +1,4 @@
 {
-  config,
   lib,
   pkgs,
   ...
@@ -11,15 +10,15 @@
   ''
     cat "${pkgs.writeText "data.json" (builtins.toJSON data)}" \
     ${t}| curl \
-        --silent \
-        --show-error \
-        --retry 3 \
-        --retry-connrefused \
-        --url "${base_url}${url}" \
-        -X ${type} \
-        -H "X-Api-Key: $(cat "${api_key_path}")" \
-        -H "Content-Type: application/json" \
-        --data-binary @-'';
+            --silent \
+            --show-error \
+            --retry 3 \
+            --retry-connrefused \
+            --url "${base_url}${url}" \
+            -X ${type} \
+            -H "X-Api-Key: $(cat "${api_key_path}")" \
+            -H "Content-Type: application/json" \
+            --data-binary @-'';
 
   json-file-resolve =
     pkgs.writers.writePython3Bin "json-file-resolve" {
@@ -66,7 +65,6 @@
         d.fields;
     };
 
-  # Core reusable function that generates init script for any instance
   mkArrInitScript = {
     serviceName, # e.g., "sonarr"
     instanceName, # e.g., "sonarr-4k"
@@ -215,7 +213,20 @@
                 proxyEnabled = false;
                 sslCertPath = "";
                 sslCertPassword = "";
-                instanceName = instanceName;
+                # Needs to start with Radarr or Sonarr
+                instanceName = let
+                  name =
+                    if (lib.hasAttr "instanceName" s.host)
+                    then s.host.instanceName
+                    else if serviceName == "radarr"
+                    then "Radarr ${instanceName}"
+                    else if serviceName == "sonarr"
+                    then "Sonarr ${instanceName}"
+                    else if serviceName == "prowlarr"
+                    then "Prowlarr"
+                    else builtins.throw "Unsupported";
+                in
+                  name;
                 branch = "master";
                 logLevel = "debug";
                 consoleLogLevel = "";
@@ -252,7 +263,7 @@
                 recycleBin = "";
                 recycleBinCleanupDays = 7;
                 rescanAfterRefresh = "always";
-                downloadPropersAndRepacks = "preferAndUpgrade";
+                downloadPropersAndRepacks = "doNotPrefer";
                 copyUsingHardlinks = true;
                 minimumFreeSpaceWhenImporting = 100;
                 skipFreeSpaceCheckWhenImporting = false;
@@ -348,7 +359,6 @@
 
   # Helper to create option types for GUI settings
   mkGuiSettingsType = {
-    serviceName,
     enableNaming ? false,
     enableRootFolders ? false,
     enableMediaManagement ? false,
@@ -421,7 +431,6 @@
         };
     };
 in {
-  # Export the reusable functions as a hidden option
   options.util-nixarr.arrLib = mkOption {
     type = types.unspecified;
     visible = false;

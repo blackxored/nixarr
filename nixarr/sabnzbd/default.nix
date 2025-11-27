@@ -357,7 +357,6 @@ in {
           "d '${cfg.watchDir}'                       0755 ${globals.sabnzbd.user} ${globals.sabnzbd.group} - -"
           "d '${cfg.downloadDir}'                    0755 ${globals.sabnzbd.user} ${globals.sabnzbd.group} - -"
         ]
-        ++ lib.optional cfg.manageConfig "C ${cfg.stateDir}/sabnzbd.ini - - - - ${ini-base-config-file}"
         ++ lib.optionals cfg.manageDirs [
           # Media dirs
           "d '${nixarr.mediaDir}/usenet/manual'        0775 ${globals.sabnzbd.user} ${globals.sabnzbd.group} - -"
