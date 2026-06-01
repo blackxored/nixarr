@@ -139,13 +139,6 @@ in {
       '';
     };
 
-    manageConfig = mkOption {
-      type = types.bool;
-      default = cfg.configFile == null;
-      internal = true;
-      visible = false;
-    };
-
     configFile = mkOption {
       type = types.nullOr types.path;
       default = null;
@@ -371,19 +364,16 @@ in {
         package = cfg.package;
         user = globals.sabnzbd.user;
         group = globals.sabnzbd.group;
-        configFile =
-          if (cfg.configFile != null)
-          then cfg.configFile
-          else "${cfg.stateDir}/sabnzbd.ini";
+        configFile = "${cfg.stateDir}/sabnzbd.ini";
       };
 
       networking.firewall.allowedTCPPorts = mkIf cfg.openFirewall [cfg.guiPort];
 
       systemd.services.sabnzbd.serviceConfig = {
-        ExecStartPre = lib.mkIf cfg.manageConfig (lib.mkBefore [
+        ExecStartPre = lib.mkBefore [
           ("+" + fix-config-permissions-script + "/bin/sabnzbd-fix-config-permissions")
           (apply-user-configs-script + "/bin/sabnzbd-set-user-values")
-        ]);
+        ];
         Restart = "on-failure";
         StartLimitBurst = 5;
       };
