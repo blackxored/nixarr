@@ -334,7 +334,6 @@ in {
 
     guiSettings = mkOption {
       type = arrLib.mkGuiSettingsType {
-        serviceName = "radarr";
         enableNaming = true;
         enableRootFolders = true;
         enableMediaManagement = true;
@@ -445,7 +444,6 @@ in {
 
           guiSettings = mkOption {
             type = arrLib.mkGuiSettingsType {
-              serviceName = "radarr";
               enableRootFolders = true;
               enableMediaManagement = true;
             };

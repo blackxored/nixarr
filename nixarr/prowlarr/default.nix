@@ -124,8 +124,6 @@ in {
 
     guiSettings = mkOption {
       type = arrLib.mkGuiSettingsType {
-        serviceName = "prowlarr";
-
         enableIndexers = true;
         enableIndexerProxies = true;
         enableApplications = true;

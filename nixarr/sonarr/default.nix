@@ -245,7 +245,6 @@ in {
 
     guiSettings = mkOption {
       type = arrLib.mkGuiSettingsType {
-        serviceName = "sonarr";
         enableRootFolders = true;
         enableNaming = true;
         enableMediaManagement = true;
@@ -355,7 +354,6 @@ in {
 
           guiSettings = mkOption {
             type = arrLib.mkGuiSettingsType {
-              serviceName = "sonarr";
               enableRootFolders = true;
               enableMediaManagement = true;
             };
