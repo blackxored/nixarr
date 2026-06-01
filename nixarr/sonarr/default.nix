@@ -363,6 +363,10 @@ in {
               These are recursively merged with the base `guiSettings`.
             '';
           };
+
+          jellyseerrServerId = mkOption {
+            type = types.int;
+          };
         };
       }));
       default = {};

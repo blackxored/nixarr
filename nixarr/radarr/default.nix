@@ -134,102 +134,6 @@ with lib; let
       enableRootFolders = true;
       enableMediaManagement = true;
     };
-
-  jellyseerrServerIds = map (builtins.getAttr "jellyseerrServerId") enabledInstances;
-  instanceType = types.submodule ({name, ...}: {
-    options = {
-      enable = mkOption {
-        type = types.bool;
-        default = true;
-        description = "Whether to enable this Radarr instance.";
-      };
-
-      package = mkOption {
-        type = types.nullOr types.package;
-        default = null;
-        description = "Package to use for this Radarr instance.";
-      };
-
-      port = mkOption {
-        type = types.nullOr types.port;
-        default = null;
-        description = ''
-          Port for this Radarr instance. If unset, one will be assigned
-          automatically based on `nixarr.radarr.port`.
-        '';
-      };
-
-      stateDir = mkOption {
-        type = types.nullOr types.path;
-        default = null;
-        description = ''
-          Override the state directory for this instance. Defaults to
-          `"''${nixarr.stateDir}/radarr-${name}"`.
-        '';
-      };
-
-      librarySubDir = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = ''
-          Override the media library subdirectory for this instance.
-          Defaults to `"''${cfg.librarySubDir}-${name}"`.
-        '';
-      };
-
-      openFirewall = mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = ''
-          Whether to open the firewall for this instance. Defaults to the
-          inverse of the resolved VPN setting.
-        '';
-      };
-
-      vpn.enable = mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = ''
-          Route traffic for this instance through the VPN. Defaults to
-          `nixarr.radarr.vpn.enable`.
-        '';
-      };
-
-      declarative = mkOption {
-        type = types.nullOr types.bool;
-        default = null;
-        description = ''
-          Override `declarative` for this instance.
-          Defaults to `nixarr.radarr.declarative`.
-        '';
-      };
-
-      apiKeyFile = mkOption {
-        type = types.nullOr types.str;
-        default = null;
-        description = ''
-          Override API key file for this instance.
-          Defaults to `nixarr.radarr.apiKeyFile`.
-        '';
-      };
-
-      guiSettings = mkOption {
-        type = arrLib.mkGuiSettingsType {
-          enableRootFolders = true;
-          enableMediaManagement = true;
-        };
-        default = {};
-        description = ''
-          Override or extend GUI settings for this instance.
-          These are recursively merged with the base `guiSettings`.
-        '';
-      };
-
-      jellyseerrServerId = mkOption {
-        type = types.int;
-      };
-    };
-  });
 in {
   imports = [./settings-sync];
 
@@ -452,6 +356,10 @@ in {
               Override or extend GUI settings for this instance.
               These are recursively merged with the base `guiSettings`.
             '';
+          };
+
+          jellyseerrServerId = mkOption {
+            type = types.int;
           };
         };
       }));
