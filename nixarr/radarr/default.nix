@@ -594,10 +594,11 @@ in {
                   Type = "simple";
                   User = globals.radarr.user;
                   Group = globals.radarr.group;
-                  ExecStart =
+                  ExecStart = lib.mkForce (
                     if instance.declarative
                     then "${lib.getExe initScript}"
-                    else "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}";
+                    else "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}"
+                  );
                   Restart = "on-failure";
                   # Set UMask to 0002 so directories are created with group write permission (775)
                   # This allows other services in the media group (like Jellyfin) to modify files

@@ -473,11 +473,13 @@ in {
                   Type = "simple";
                   User = globals.sonarr.user;
                   Group = globals.sonarr.group;
-                  ExecStart =
+                  ExecStart = lib.mkForce (
                     if instance.declarative
                     then "${lib.getExe initScript}"
-                    else "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}";
+                    else "${lib.getExe instance.package} -nobrowser -data=${lib.escapeShellArg instance.stateDir}"
+                  );
                   Restart = "on-failure";
+                  UMask = lib.mkForce "002";
                 };
               };
             }
