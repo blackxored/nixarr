@@ -2,8 +2,9 @@
   pkgs,
   nixosModules,
   lib ? pkgs.lib,
+  testers,
 }:
-pkgs.nixosTest {
+testers.nixosTest {
   name = "declarative-multi-instance-test";
 
   nodes.machine = {
